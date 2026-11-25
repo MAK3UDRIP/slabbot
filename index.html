@@ -52,7 +52,10 @@
       body: JSON.stringify({ fn: fn, args: args || [], token: code || ls(KEY) }) })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (j.locked) { ls(KEY, null); setTimeout(function () { location.reload(); }, 50); throw new Error('Access code no longer valid.'); }
+        if (j.locked) {
+          if (!code) { ls(KEY, null); setTimeout(function () { location.reload(); }, 50); }
+          throw new Error('Access code not accepted.');
+        }
         if (!j.ok) throw new Error(j.error || 'Something went wrong.');
         return j.result;
       });
