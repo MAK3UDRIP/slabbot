@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Slab Bot">
+<meta name="theme-color" content="#05031a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<title>RetroHits Slab Bot</title>
+<style>
+  html, body { margin: 0; background: #05031a; color: #f4f1ff; -webkit-text-size-adjust: 100%; }
+  body { min-height: 100vh; overscroll-behavior: none; }
+  #boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+    font: 600 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center;
+    background: radial-gradient(circle at 50% 35%, #1c0d5e, #05031a 70%); }
+  #boot img { width: 120px; height: 120px; image-rendering: pixelated; border-radius: 26px;
+    box-shadow: 0 0 0 2px #ff9a1f, 0 0 0 4px #150c38, 0 0 0 6px #ff3ac8, 0 12px 30px rgba(0,0,0,.6); }
+  #boot h1 { margin: 0; font: 800 20px/1.2 -apple-system, system-ui, sans-serif; letter-spacing: 1px; }
+  #boot p { margin: 0; color: #b3acdf; max-width: 320px; }
+  #boot input { width: 100%; max-width: 340px; box-sizing: border-box; padding: 14px; border-radius: 8px; border: 0; font: 15px ui-monospace, Menlo, monospace;
+    background: #06041c; color: #fff; box-shadow: inset 0 0 0 2px #5fe0ff; }
+  #boot button { width: 100%; max-width: 340px; padding: 15px; border: 0; border-radius: 8px; font: 800 15px system-ui; color: #3a0a00;
+    background: linear-gradient(180deg, #fff9c4, #ffcc1f 45%, #ff7a00); box-shadow: inset 0 0 0 2px #120a35, 0 4px 0 #5a1200; }
+  #boot .err { color: #ff8da1; min-height: 1.2em; }
+  .spin { width: 22px; height: 22px; border: 3px solid #2f2678; border-top-color: #ffcc1f; border-radius: 50%; animation: s .8s linear infinite; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  /* full-screen iPhone: keep the app clear of the notch and home bar */
+  header#top { padding-top: env(safe-area-inset-top); }
+  main { padding-bottom: calc(110px + env(safe-area-inset-bottom)) !important; }
+  #toast { bottom: calc(22px + env(safe-area-inset-bottom)) !important; }
+  #splash { padding-top: calc(24px + env(safe-area-inset-top)) !important; }
+</style>
+</head>
+<body>
+<div id="boot"><img src="icon-180.png" alt=""><div class="spin"></div></div>
+<script>
+(function () {
+  var API = 'https://script.google.com/macros/s/AKfycbwrzyCIiBLDmXeSsPIFNvthZho5zZ9J0qbxxoaJli4D3QC2MwooLHl8fKfxYOAmEruKRg/exec';
+  var KEY = 'rhsb_code', CACHE = 'rhsb_app_html';
+  var boot = document.getElementById('boot');
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+
+  // Calls a backend function with your access code.
+  function call(fn, args, code) {
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ fn: fn, args: args || [], token: code || ls(KEY) }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j.locked) { ls(KEY, null); setTimeout(function () { location.reload(); }, 50); throw new Error('Access code no longer valid.'); }
+        if (!j.ok) throw new Error(j.error || 'Something went wrong.');
+        return j.result;
+      });
+  }
+
+  // The app was written for Google's google.script.run; this gives it the same API over the network.
+  function runner(h) {
+    return new Proxy({}, { get: function (_, name) {
+      if (name === 'withSuccessHandler') return function (f) { return runner({ ok: f, fail: h.fail }); };
+      if (name === 'withFailureHandler') return function (f) { return runner({ ok: h.ok, fail: f }); };
+      return function () {
+        var args = Array.prototype.slice.call(arguments);
+        call(name, args).then(function (r) { if (h.ok) h.ok(r); }, function (e) { if (h.fail) h.fail(e); });
+      };
+    } });
+  }
+
+  function mount(html) {
+    window.RH_PWA = true;
+    window.google = { script: { run: runner({}) } };
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.head.querySelectorAll('style, link[rel="stylesheet"], link[rel="preconnect"]').forEach(function (n) { document.head.appendChild(document.importNode(n, true)); });
+    var scripts = [].slice.call(doc.body.querySelectorAll('script'));
+    scripts.forEach(function (s) { s.parentNode.removeChild(s); });
+    boot.remove();
+    document.body.insertAdjacentHTML('afterbegin', doc.body.innerHTML);
+    scripts.forEach(function (s) { var n = document.createElement('script'); n.textContent = s.textContent; document.body.appendChild(n); });
+  }
+
+  function loadApp() {
+    var cached = ls(CACHE);
+    var fresh = fetch(API + '?asset=app', { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
+    if (cached) {
+      mount(cached);
+      fresh.then(function (h) { if (h && h.indexOf('<!DOCTYPE') === 0) ls(CACHE, h); }).catch(function () {});
+    } else {
+      fresh.then(function (h) { ls(CACHE, h); mount(h); })
+        .catch(function () { boot.innerHTML = '<h1>Can\'t reach Slab Bot</h1><p>Check your connection and reopen the app.</p><button onclick="location.reload()">Try again</button>'; });
+    }
+  }
+
+  function askCode(msg) {
+    boot.innerHTML = '<img src="icon-180.png" alt=""><h1>RETROHITS SLAB BOT</h1>' +
+      '<p>Paste your private access code. It\'s in the Slab Bot web app under Setup → iPhone app.</p>' +
+      '<input id="code" placeholder="RH-…" autocomplete="off" autocapitalize="off" spellcheck="false">' +
+      '<button id="go">Connect</button><div class="err" id="err"></div>';
+    if (msg) document.getElementById('err').textContent = msg;
+    document.getElementById('go').onclick = function () {
+      var c = document.getElementById('code').value.trim(), btn = this;
+      if (!c) return;
+      btn.disabled = true; btn.textContent = 'Connecting…';
+      call('ping', [], c).then(function () { ls(KEY, c); loadApp(); })
+        .catch(function () { btn.disabled = false; btn.textContent = 'Connect'; document.getElementById('err').textContent = 'That code didn\'t work. Copy it again and paste the whole thing.'; });
+    };
+  }
+
+  if (ls(KEY)) loadApp(); else askCode();
+})();
+</script>
+</body>
+</html>
